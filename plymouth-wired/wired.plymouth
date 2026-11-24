@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Wired
+Description=Schwarz mit hellblauem animiertem Wired-Logo
+ModuleName=script
+
+[script]
+ImageDir=@THEMEDIR@
+ScriptFile=@THEMEDIR@/wired.script

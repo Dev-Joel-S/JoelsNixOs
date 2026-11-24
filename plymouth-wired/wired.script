@@ -1,0 +1,203 @@
+# Wired: schwarzer Hintergrund, animiertes Logo in Hellblau,
+# Passwort- bzw. PIN-Abfrage fuer LUKS.
+
+Window.SetBackgroundTopColor(0, 0, 0);
+Window.SetBackgroundBottomColor(0, 0, 0);
+
+# Alle Bilder sind fuer 2160 px Bildschirmhoehe gerendert
+sw = Window.GetWidth(0);
+sh = Window.GetHeight(0);
+ox = Window.GetX(0);
+oy = Window.GetY(0);
+s = sh / 2160;
+
+fun scaled(img)
+  {
+    w = Math.Int(img.GetWidth() * global.s);
+    h = Math.Int(img.GetHeight() * global.s);
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    return img.Scale(w, h);
+  }
+
+# ---------- Bilder laden ----------
+for (i = 0; i < 6; i++)
+  logo[i] = scaled(Image("logo-" + i + ".png"));
+title   = scaled(Image("title.png"));
+jp      = scaled(Image("jp.png"));
+lbl_pw  = scaled(Image("label-password.png"));
+lbl_pin = scaled(Image("label-pin.png"));
+field   = scaled(Image("field.png"));
+bullet  = scaled(Image("bullet.png"));
+err     = scaled(Image("error.png"));
+
+# ---------- Layout ----------
+g1 = 30 * s;
+g2 = 12 * s;
+g3 = 80 * s;
+g4 = 10 * s;
+total = logo[0].GetHeight() + g1 + title.GetHeight() + g2 + jp.GetHeight() + g3
+        + lbl_pw.GetHeight() + g4 + field.GetHeight();
+y = oy + (sh - total) / 2;
+
+logo_sprite = Sprite(logo[0]);
+logo_sprite.SetPosition(ox + (sw - logo[0].GetWidth()) / 2, y, 1);
+y = y + logo[0].GetHeight() + g1;
+
+title_sprite = Sprite(title);
+title_sprite.SetPosition(ox + (sw - title.GetWidth()) / 2, y, 1);
+y = y + title.GetHeight() + g2;
+
+jp_sprite = Sprite(jp);
+jp_sprite.SetPosition(ox + (sw - jp.GetWidth()) / 2, y, 1);
+y = y + jp.GetHeight() + g3;
+
+field_x = ox + (sw - field.GetWidth()) / 2;
+
+label_sprite = Sprite(lbl_pw);
+label_sprite.SetPosition(field_x + 40 * s, y, 1);
+label_sprite.SetOpacity(0);
+y = y + lbl_pw.GetHeight() + g4;
+
+field_y = y;
+field_sprite = Sprite(field);
+field_sprite.SetPosition(field_x, field_y, 1);
+field_sprite.SetOpacity(0);
+
+message_y = field_y + field.GetHeight() + 30 * s;
+message_sprite = Sprite();
+message_sprite.SetOpacity(0);
+
+bullet_step = 44 * s;
+bullet_min_step = 26 * s;
+bullet_avail = field.GetWidth() - 120 * s;
+
+err_sprite = Sprite(err);
+err_sprite.SetPosition(ox + (sw - err.GetWidth()) / 2, message_y, 2);
+err_sprite.SetOpacity(0);
+last_bullets = 0;
+prompt_closed = 0;
+
+# ---------- Animation, 25 Bilder pro Sekunde ----------
+tick = 0;
+fun refresh_callback ()
+  {
+    global.tick++;
+    global.logo_sprite.SetImage(global.logo[Math.Int(global.tick / 2) % 6]);
+  }
+Plymouth.SetRefreshFunction(refresh_callback);
+
+# ---------- Passwort / PIN ----------
+fun is_pin(text)
+  {
+    for (i = 0; text.CharAt(i + 2); i++)
+      {
+        if (text.CharAt(i) == "P" && text.CharAt(i + 1) == "I" && text.CharAt(i + 2) == "N")
+          return 1;
+      }
+    return 0;
+  }
+
+fun show_dialog(opacity)
+  {
+    global.label_sprite.SetOpacity(opacity);
+    global.field_sprite.SetOpacity(opacity);
+  }
+
+fun display_password_callback (prompt, bullets)
+  {
+    if (is_pin(prompt))
+      global.label_sprite.SetImage(global.lbl_pin);
+    else
+      global.label_sprite.SetImage(global.lbl_pw);
+    show_dialog(1);
+
+    # Falsche Eingabe: neue Abfrage nach einer abgeschickten Eingabe
+    if (bullets > 0)
+      global.err_sprite.SetOpacity(0);
+    else if (global.prompt_closed)
+      global.err_sprite.SetOpacity(1);
+    global.prompt_closed = 0;
+    global.last_bullets = bullets;
+
+    # Punkte ruecken bei langen Passwoertern zusammen
+    n = bullets;
+    step = global.bullet_step;
+    if (n > 0 && n * step > global.bullet_avail)
+      step = global.bullet_avail / n;
+    if (step < global.bullet_min_step)
+      {
+        step = global.bullet_min_step;
+        n = Math.Int(global.bullet_avail / step);
+      }
+    width = (n - 1) * step + global.bullet.GetWidth();
+    x0 = global.field_x + (global.field.GetWidth() - width) / 2;
+    by = global.field_y + (global.field.GetHeight() - global.bullet.GetHeight()) / 2;
+
+    for (i = 0; global.bullet_sprites[i] || i < n; i++)
+      {
+        if (!global.bullet_sprites[i])
+          global.bullet_sprites[i] = Sprite(global.bullet);
+        global.bullet_sprites[i].SetPosition(x0 + i * step, by, 2);
+        if (i < n)
+          global.bullet_sprites[i].SetOpacity(1);
+        else
+          global.bullet_sprites[i].SetOpacity(0);
+      }
+  }
+
+fun display_normal_callback ()
+  {
+    if (global.last_bullets > 0)
+      global.prompt_closed = 1;
+    global.last_bullets = 0;
+    show_dialog(0);
+    for (i = 0; global.bullet_sprites[i]; i++)
+      global.bullet_sprites[i].SetOpacity(0);
+  }
+
+fun message_callback (text)
+  {
+    img = Image.Text(text, 0.66, 0.86, 1.0, 1, "Sans " + Math.Int(34 * global.s));
+    global.message_sprite.SetImage(img);
+    global.message_sprite.SetPosition(global.ox + (global.sw - img.GetWidth()) / 2, global.message_y, 1);
+    global.message_sprite.SetOpacity(1);
+  }
+
+fun hide_message_callback (text)
+  {
+    global.message_sprite.SetOpacity(0);
+  }
+
+Plymouth.SetDisplayPasswordFunction(display_password_callback);
+Plymouth.SetDisplayNormalFunction(display_normal_callback);
+Plymouth.SetDisplayMessageFunction(message_callback);
+Plymouth.SetHideMessageFunction(hide_message_callback);
+
+# ---------- Boot-Meldungen unten links, wie ein Terminal ----------
+log_n = 14;
+log_size = Math.Int(26 * s);
+if (log_size < 9) log_size = 9;
+log_line = log_size * 1.6;
+log_x = ox + 50 * s;
+log_y = oy + sh - 50 * s - log_n * log_line;
+
+fun status_callback (text)
+  {
+    for (i = 0; i < global.log_n - 1; i++)
+      global.log_text[i] = global.log_text[i + 1];
+    global.log_text[global.log_n - 1] = text;
+    for (i = 0; i < global.log_n; i++)
+      {
+        if (global.log_text[i])
+          {
+            if (!global.log_sprite[i])
+              global.log_sprite[i] = Sprite();
+            alpha = 0.15 + 0.6 * (i + 1) / global.log_n;
+            img = Image.Text("> " + global.log_text[i], 0.82, 0.94, 1.0, alpha, "Mono " + global.log_size);
+            global.log_sprite[i].SetImage(img);
+            global.log_sprite[i].SetPosition(global.log_x, global.log_y + i * global.log_line, 0);
+          }
+      }
+  }
+Plymouth.SetUpdateStatusFunction(status_callback);
